@@ -1,0 +1,9 @@
+#include <header.h>
+
+int main()
+{
+    /*Actual C code*/
+    printf('a', '\b', '\141', '\n', '\x61');
+    float f = 0x1.p10;
+    return 0;
+}
