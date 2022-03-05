@@ -1,4 +1,6 @@
 main
-lex
+libclex.a
+clex.o
+
 .vscode/
-lex.yy.c
+clex.yy.c

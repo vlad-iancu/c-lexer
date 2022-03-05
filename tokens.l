@@ -8,8 +8,6 @@
     #include <ctype.h>
     #include <math.h>
 
-    int brackets = 0;
-    int comments = 0;
     char *stringValue = NULL;
     unsigned long long intValue = 0;
     long double floatValue = 0;
@@ -79,8 +77,8 @@ multiline_comment      [\/][\*](.*)[\*][\/]
 string                 \"(\\.|[^"\\])*\"
 decimal_float          ([0-9]*\.[0-9]+|[0-9]+\.)([eE][0-9]+)?
 decimal_integer        [0-9]+([eE][-+]?[0-9]+)?
-hex_integer            0[xX][0-9]+
-hex_float              0[xX][0-9]+(\.[0-9]*(p[0-9]+)?)?
+hex_integer            0[xX][0-9a-fA-F]+
+hex_float              0[xX][0-9a-fA-F]+(\.[0-9]*(p[0-9]+)?)
 identifier             [[:alpha:]_][[:alnum:]_]*
 chr                    '\\?[^']'
 oct_chr                '\\[0-7]{0,3}'
@@ -142,10 +140,11 @@ preprocessor_directive #[[:alpha:]]+(.*)
 "--" |
 "sizeof"    {stringValue = yytext; return OPERATOR;}
 
-
 {hex_float} |
+{decimal_integer}f |
 {decimal_float} {
-                    sscanf(yytext, "%lle", &floatValue);
+                    char *p;
+                    floatValue = strtold(yytext, &p);
                     if(errno)
                     {
                         error = 1;
@@ -154,20 +153,24 @@ preprocessor_directive #[[:alpha:]]+(.*)
                     }
                     return REAL_LIT;
                 }
-{hex_integer} |
+{hex_integer} {
+                char *p;
+                intValue = strtoull(yytext, &p, 16);
+                unsigned long long temp = (unsigned long long)floatValue;
+                if(errno)
+                {
+                  error = 1;
+                  errmsg = malloc(100 * sizeof(char));
+                  sprintf(errmsg, "integer literal \"%s\" is invalid", yytext);
+                }
+                return INTEGER_LIT;
+              }
+{decimal_integer}[uU]
+{decimal_integer}[lL]
 {decimal_integer} {
-                    sscanf(yytext, "%lle", &floatValue);
+                    char *p;
+                    intValue = strtoull(yytext, &p, 10);
                     unsigned long long temp = (unsigned long long)floatValue;
-                    if(temp == floatValue)
-                    {
-                        intValue = temp;
-                    }
-                    else
-                    {
-                        error = 1;
-                        errmsg = malloc(100 * sizeof(char));
-                        sprintf(errmsg, "integer literal \"%s\" is invalid", yytext);
-                    }
                     if(errno)
                     {
                         error = 1;
@@ -237,129 +240,123 @@ preprocessor_directive #[[:alpha:]]+(.*)
 [[:space:]]*    ;
 %%
 
-int main(int argc, char **argv)
+
+Token nextToken()
 {
     int tok;
-    while(!error && (tok = yylex()))
+    Token token;
+    tok = yylex();
+    token.error = error;
+    if(error)
     {
-        if(error)
-        {
-            printf("%s\n", errmsg);
-            continue;
-        }
-        switch(tok)
-        {
-            case OPEN_CB:
-            {
-                printf("OPEN_CB {");
-            }
-            break;
-            case CLOSE_CB:
-            {
-                printf("CLOSE_CB }");
-            }
-            break;
-            case OPEN_B:
-            {
-                printf("OPEN_B (");
-            }
-            break;
-            case CLOSE_B:
-            {
-                printf("CLOSE_B )");
-            }
-            break;
-            case OPEN_SB:
-            {
-                printf("OPEN_SB [");
-            }
-            break;
-            case CLOSE_SB:
-            {
-                printf("CLOSE_SB ]");
-            }
-            break;
-            case COMMA:
-            {
-                printf("COMMA ,");
-            }
-            break;
-            case DOT:
-            {
-                printf("DOT .");
-            }
-            case TILDA:
-            {
-                printf("TILDA ~");
-            }
-            break;
-            case OPERATOR:
-            {
-                printf("OPERATOR %s", stringValue);
-            }
-            break;
-            case IDENTIFIER:
-            {
-                printf("IDENTIFIER %s", stringValue);
-            }
-            break;
-            case KEYWORD:
-            {
-                printf("KEYWORD %s", stringValue);
-            }
-            break;
-            case INTEGER_LIT:
-            {
-                printf("INTEGER_LIT %llu", intValue);
-            }
-            break;
-            case REAL_LIT:
-            {
-                printf("REAL_LIT %Lf", floatValue);
-            }
-            break;
-            case STRING_LIT:
-            {
-                printf("STRING_LIT %s", stringValue);
-            }
-            break;
-            case CHAR_LIT:
-            {
-                if(iscntrl(stringValue[0]))
-                {
-                    for(int i = 0;i < escapes; i++)
-                    {
-                        if(escapechr[i] == stringValue[0])
-                        {
-                            printf("CHAR_LIT %s %d", escapestr[i], (int)stringValue[0]);
-                            break;
-                        }
-                    }
-                }
-                else
-                {
-                    printf("CHAR_LIT %c %d", stringValue[0], (int)stringValue[0]);
-                }
-            }
-            break;
-            case COLON:
-            {
-                printf("COLON :");
-            }
-            break;
-            case SEMICOLON:
-            {
-                printf("SEMICOLON ;");
-            }
-            break;
-            case PREPROCESSOR_DIRECTIVE:
-            {
-                printf("PREPROCESSOR_DIRECTIVE %s", stringValue);
-            }
-            break;
-        }
-        //Don't forget about hex for decimal and char literals
-        printf("\n");
+        return token;
     }
-    //free(errmsg);
+    token.token = tok;
+    switch(tok)
+    {
+        case OPEN_CB:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = '{';
+        }
+        break;
+        case CLOSE_CB:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = '}';
+        }
+        break;
+        case OPEN_B:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = '(';
+        }
+        break;
+        case CLOSE_B:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = ')';
+        }
+        break;
+        case OPEN_SB:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = '[';
+        }
+        break;
+        case CLOSE_SB:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = ']';
+        }
+        break;
+        case COMMA:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = ',';
+        }
+        break;
+        case DOT:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = ',';
+        }
+        case TILDA:
+        {
+            token.value.stringValue = malloc(1);
+            token.value.stringValue[0] = '~';
+        }
+        break;
+        case OPERATOR:
+        {
+            token.value.stringValue = strdup(stringValue);
+        }
+        break;
+        case IDENTIFIER:
+        {
+            token.value.stringValue = strdup(stringValue);
+        }
+        break;
+        case KEYWORD:
+        {
+            token.value.stringValue = strdup(stringValue);
+        }
+        break;
+        case INTEGER_LIT:
+        {
+            token.value.intValue = intValue;
+        }
+        break;
+        case REAL_LIT:
+        {
+            token.value.floatValue = floatValue;
+        }
+        break;
+        case STRING_LIT:
+        {
+            token.value.stringValue = strdup(stringValue);
+        }
+        break;
+        case CHAR_LIT:
+        {
+            token.value.stringValue = strdup(stringValue);
+        }
+        break;
+        case COLON:
+        {
+            token.value.stringValue = strdup(stringValue);
+        }
+        break;
+        case SEMICOLON:
+        {
+            token.value.stringValue = strdup(stringValue);
+        }
+        break;
+        case PREPROCESSOR_DIRECTIVE:
+        {
+            token.value.stringValue = strdup(stringValue);
+        }
+        break;
+    }
+    return token;       
 }

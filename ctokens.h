@@ -1,3 +1,5 @@
+#ifndef CTOKENS_H_
+#define CTOKENS_H_
 
 #define OPEN_CB 258
 #define CLOSE_CB 259
@@ -18,3 +20,23 @@
 #define COLON 274
 #define SEMICOLON 275
 #define PREPROCESSOR_DIRECTIVE 276
+
+typedef struct Token
+{
+    int token;
+    int error;
+    union
+    {
+        unsigned long long intValue;
+        char *stringValue;
+        long double floatValue;
+    } value;
+} Token;
+
+extern int escapes;
+extern char escapestr[11][10];
+extern char escapechr[11];
+extern char kwds[32][16];
+extern char *errmsg;
+
+#endif
